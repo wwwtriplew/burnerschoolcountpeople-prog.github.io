@@ -6,10 +6,16 @@
 // ============================================
 // Configuration
 // ============================================
-// UPDATE THESE WITH YOUR SUPABASE CREDENTIALS
+// HARDCODED SUPABASE CREDENTIALS
+// The anon key is safe to expose in frontend code because:
+// 1. Row Level Security (RLS) prevents unauthorized writes/deletes
+// 2. RLS restricts reads to public data only
+// 3. The project URL is publicly visible anyway
+// To configure: Replace these values with your Supabase project credentials
 const CONFIG = {
-    SUPABASE_URL: localStorage.getItem('SUPABASE_URL') || '',
-    SUPABASE_ANON_KEY: localStorage.getItem('SUPABASE_ANON_KEY') || '',
+    SUPABASE_URL: 'https://rgkkadtaiivcuuvekwdo.supabase.co', // Replace with your Supabase URL
+    SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJna2thZHRhaWl2Y3V1dmVrd2RvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5NzYyOTUsImV4cCI6MjA3OTU1MjI5NX0.cTAGAOIT_rpnQGNMO9v-o1PIHwyoB3r8xSPaqVccFrI', 
+    // Replace with your Supabase anon key ^^^^^^^^^^^^^^^^^^^^^^
     TABLE_NAME: 'room_stats',
     REFRESH_INTERVAL: 30000, // 30 seconds
     MAX_RETRIES: 3,
@@ -38,10 +44,12 @@ const emptyState = document.getElementById('emptyState');
 // ============================================
 async function initializeApp() {
     try {
-        // Check for stored credentials
-        if (!CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY) {
-            promptForCredentials();
-            return;
+        // Validate configuration
+        if (!CONFIG.SUPABASE_URL || CONFIG.SUPABASE_URL === 'https://your-project.supabase.co') {
+            throw new Error('Supabase URL not configured. Please update CONFIG in script.js');
+        }
+        if (!CONFIG.SUPABASE_ANON_KEY || CONFIG.SUPABASE_ANON_KEY === 'your-anon-key-here') {
+            throw new Error('Supabase anon key not configured. Please update CONFIG in script.js');
         }
 
         // Initialize Supabase client
@@ -75,55 +83,6 @@ function initializeSupabase() {
         );
     } else {
         throw new Error('Supabase SDK not loaded');
-    }
-}
-
-// ============================================
-// Configuration Management
-// ============================================
-function promptForCredentials() {
-    const storedUrl = localStorage.getItem('SUPABASE_URL');
-    const storedKey = localStorage.getItem('SUPABASE_ANON_KEY');
-
-    if (!storedUrl || !storedKey) {
-        const message = `
-To use this app, please provide your Supabase credentials:
-
-1. Go to https://supabase.com and create a project (or use an existing one)
-2. Copy your Project URL and Anon Key from Settings → API
-3. Enter them when prompted below:
-        `;
-        alert(message);
-
-        const url = prompt(
-            'Enter your Supabase Project URL (e.g., https://xxx.supabase.co):'
-        );
-        if (!url) {
-            showError('Supabase URL is required');
-            return;
-        }
-
-        const key = prompt('Enter your Supabase Anon Key:');
-        if (!key) {
-            showError('Supabase Anon Key is required');
-            return;
-        }
-
-        // Validate URLs
-        if (!url.startsWith('https://') || !url.includes('supabase.co')) {
-            showError('Invalid Supabase URL format');
-            return;
-        }
-
-        // Save to localStorage
-        localStorage.setItem('SUPABASE_URL', url);
-        localStorage.setItem('SUPABASE_ANON_KEY', key);
-
-        CONFIG.SUPABASE_URL = url;
-        CONFIG.SUPABASE_ANON_KEY = key;
-
-        // Retry initialization
-        initializeApp();
     }
 }
 
@@ -369,17 +328,6 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
-}
-
-/**
- * Clear stored credentials
- */
-function clearCredentials() {
-    localStorage.removeItem('SUPABASE_URL');
-    localStorage.removeItem('SUPABASE_ANON_KEY');
-    CONFIG.SUPABASE_URL = '';
-    CONFIG.SUPABASE_ANON_KEY = '';
-    location.reload();
 }
 
 // ============================================
