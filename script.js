@@ -50,29 +50,32 @@ let totalOccupancy, activeRooms, busyRooms, emptyRooms;
  * Throws error if critical elements are missing
  */
 function initializeDOMElements() {
-    const requiredElements = {
-        roomGrid: 'roomGrid',
-        refreshBtn: 'refreshBtn',
-        connectionStatus: 'connectionStatus',
-        statusText: 'statusText',
-        lastUpdateText: 'lastUpdateText',
-        loadingIndicator: 'loadingIndicator',
-        errorAlert: 'errorAlert',
-        errorMessage: 'errorMessage',
-        emptyState: 'emptyState',
-        totalOccupancy: 'totalOccupancy',
-        activeRooms: 'activeRooms',
-        busyRooms: 'busyRooms',
-        emptyRooms: 'emptyRooms'
+    // Get all required DOM elements
+    roomGrid = document.getElementById('roomGrid');
+    refreshBtn = document.getElementById('refreshBtn');
+    connectionStatus = document.getElementById('connectionStatus');
+    statusText = document.getElementById('statusText');
+    lastUpdateText = document.getElementById('lastUpdateText');
+    loadingIndicator = document.getElementById('loadingIndicator');
+    errorAlert = document.getElementById('errorAlert');
+    errorMessage = document.getElementById('errorMessage');
+    emptyState = document.getElementById('emptyState');
+    totalOccupancy = document.getElementById('totalOccupancy');
+    activeRooms = document.getElementById('activeRooms');
+    busyRooms = document.getElementById('busyRooms');
+    emptyRooms = document.getElementById('emptyRooms');
+
+    // Validate all critical elements are present
+    const elements = {
+        roomGrid, refreshBtn, connectionStatus, statusText, lastUpdateText,
+        loadingIndicator, errorAlert, errorMessage, emptyState,
+        totalOccupancy, activeRooms, busyRooms, emptyRooms
     };
 
-    for (const [varName, elementId] of Object.entries(requiredElements)) {
-        const element = document.getElementById(elementId);
+    for (const [name, element] of Object.entries(elements)) {
         if (!element) {
-            throw new Error(`Required DOM element not found: ${elementId}`);
+            throw new Error(`Required DOM element not found: ${name}`);
         }
-        // Dynamically assign to global scope
-        eval(`${varName} = element`);
     }
 }
 
