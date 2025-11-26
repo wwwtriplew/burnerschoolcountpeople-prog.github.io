@@ -17,8 +17,15 @@ const CONFIG = {
     SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJna2thZHRhaWl2Y3V1dmVrd2RvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5NzYyOTUsImV4cCI6MjA3OTU1MjI5NX0.cTAGAOIT_rpnQGNMO9v-o1PIHwyoB3r8xSPaqVccFrI', 
     // Replace with your Supabase anon key ^^^^^^^^^^^^^^^^^^^^^^
     TABLE_NAME: 'detections', // Replace with your table name if different
-    REFRESH_INTERVAL: 30000, // 30 seconds
-    MAX_RETRIES: 3,
+    REFRESH_INTERVAL: 30000, // 30 seconds (auto-refresh interval)
+    MAX_RETRIES: 3, // Maximum retry attempts for failed requests
+    MAX_CAPACITY_PER_ROOM: 30, // Default maximum capacity per room (for percentage calculation)
+    STALENESS_THRESHOLD_MINUTES: 5, // Data older than this is marked as stale
+    // Occupancy thresholds for status indicators
+    THRESHOLDS: {
+        LOW: 8,      // 0-8 people = "Low" (green)
+        MODERATE: 20 // 9-20 = "Moderate" (amber), 21+ = "Busy" (red)
+    }
 };
 
 // ============================================
@@ -27,29 +34,65 @@ const CONFIG = {
 let supabaseClient = null;
 let isLoading = false;
 let refreshInterval = null;
+let currentFilter = 'all';
+let allRooms = [];
 
 // ============================================
 // DOM Elements
 // ============================================
-const roomGrid = document.getElementById('roomGrid');
-const refreshBtn = document.getElementById('refreshBtn');
-const statusText = document.getElementById('status');
-const lastUpdateText = document.getElementById('lastUpdate');
-const loadingIndicator = document.getElementById('loadingIndicator');
-const errorMessage = document.getElementById('errorMessage');
-const emptyState = document.getElementById('emptyState');
+// Cache DOM elements with null checks
+let roomGrid, refreshBtn, connectionStatus, statusText, lastUpdateText;
+let loadingIndicator, errorAlert, errorMessage, emptyState;
+let totalOccupancy, activeRooms, busyRooms, emptyRooms;
+
+/**
+ * Initialize DOM element references
+ * Throws error if critical elements are missing
+ */
+function initializeDOMElements() {
+    const requiredElements = {
+        roomGrid: 'roomGrid',
+        refreshBtn: 'refreshBtn',
+        connectionStatus: 'connectionStatus',
+        statusText: 'statusText',
+        lastUpdateText: 'lastUpdateText',
+        loadingIndicator: 'loadingIndicator',
+        errorAlert: 'errorAlert',
+        errorMessage: 'errorMessage',
+        emptyState: 'emptyState',
+        totalOccupancy: 'totalOccupancy',
+        activeRooms: 'activeRooms',
+        busyRooms: 'busyRooms',
+        emptyRooms: 'emptyRooms'
+    };
+
+    for (const [varName, elementId] of Object.entries(requiredElements)) {
+        const element = document.getElementById(elementId);
+        if (!element) {
+            throw new Error(`Required DOM element not found: ${elementId}`);
+        }
+        // Dynamically assign to global scope
+        eval(`${varName} = element`);
+    }
+}
 
 // ============================================
 // Initialization
 // ============================================
 async function initializeApp() {
     try {
+        // Initialize DOM elements first
+        initializeDOMElements();
+
         // Validate configuration
         if (!CONFIG.SUPABASE_URL || CONFIG.SUPABASE_URL === 'https://your-project.supabase.co') {
             throw new Error('Supabase URL not configured. Please update CONFIG in script.js');
         }
         if (!CONFIG.SUPABASE_ANON_KEY || CONFIG.SUPABASE_ANON_KEY === 'your-anon-key-here') {
             throw new Error('Supabase anon key not configured. Please update CONFIG in script.js');
+        }
+        if (!CONFIG.TABLE_NAME) {
+            throw new Error('TABLE_NAME not configured. Please update CONFIG in script.js');
         }
 
         // Initialize Supabase client
@@ -121,11 +164,15 @@ async function fetchLatestRoomCounts() {
         }
 
         // Normalize column name: convert person_count to people_count for consistency
-        const normalizedData = data.map(record => ({
-            room_id: record.room_id,
-            timestamp: record.timestamp,
-            people_count: record.people_count || record.person_count || 0
-        }));
+        const normalizedData = data.map(record => {
+            const count = record.people_count || record.person_count || 0;
+            return {
+                room_id: record.room_id,
+                timestamp: record.timestamp,
+                // Ensure count is non-negative and a valid number
+                people_count: Math.max(0, parseInt(count, 10) || 0)
+            };
+        });
 
         // Group by room_id and keep only the latest record per room
         const roomMap = {};
@@ -165,6 +212,7 @@ async function loadRoomData() {
         } else {
             hideEmptyState();
             renderRoomCards(rooms);
+            updateStatistics(rooms);
             updateStatus(`Connected • ${rooms.length} room(s)`, 'success');
         }
 
@@ -192,61 +240,176 @@ async function loadRoomData() {
 }
 
 /**
- * Render room cards to the grid
+ * Render room cards to the grid with filtering
  */
 function renderRoomCards(rooms) {
+    allRooms = rooms;
+    
+    // Apply current filter
+    let filteredRooms = rooms;
+    if (currentFilter === 'occupied') {
+        filteredRooms = rooms.filter(room => room.people_count > 0);
+    } else if (currentFilter === 'empty') {
+        filteredRooms = rooms.filter(room => room.people_count === 0);
+    }
+    
     roomGrid.innerHTML = '';
+    
+    if (filteredRooms.length === 0) {
+        roomGrid.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 2rem;">No rooms match the current filter.</p>';
+        return;
+    }
 
-    rooms.forEach((room) => {
+    filteredRooms.forEach((room) => {
         const card = createRoomCard(room);
         roomGrid.appendChild(card);
     });
 }
 
 /**
- * Create a single room card element
+ * Create a single room card element with enhanced design
  */
 function createRoomCard(room) {
     const card = document.createElement('div');
     card.className = 'room-card';
+    card.dataset.roomId = room.room_id;
+    card.dataset.count = room.people_count;
 
-    const { status, color } = getOccupancyStatus(room.people_count);
+    const { status, color, icon, capacityPercent } = getOccupancyStatus(room.people_count);
     const formattedTime = formatTimestamp(room.timestamp);
+    const isStale = isDataStale(room.timestamp);
+    
+    if (isStale) {
+        card.classList.add('stale-data');
+    }
 
     card.innerHTML = `
-        <h2 class="room-name">${escapeHtml(room.room_id)}</h2>
-        <div class="room-stats">
-            <div class="stat-row">
-                <span class="stat-label">Occupancy</span>
-                <span class="stat-value" style="color: ${color}">
-                    ${room.people_count} ${room.people_count === 1 ? 'person' : 'people'}
-                </span>
+        <div class="room-header">
+            <div class="room-title-group">
+                <span class="room-icon">${icon}</span>
+                <h3 class="room-name">${escapeHtml(formatRoomName(room.room_id))}</h3>
             </div>
-            <div class="stat-row">
-                <span class="stat-label">Status</span>
-                <span class="occupancy-badge ${status}">
-                    <span class="occupancy-dot"></span>
-                    ${status.charAt(0).toUpperCase() + status.slice(1)}
-                </span>
+            <div class="room-status-badge ${status}">
+                <span class="status-dot"></span>
             </div>
         </div>
-        <div class="timestamp">Last updated: ${formattedTime}</div>
+        
+        <div class="room-body">
+            <div class="occupancy-display">
+                <div class="occupancy-number" style="color: ${color}">
+                    ${room.people_count}
+                </div>
+                <div class="occupancy-label">
+                    ${room.people_count === 1 ? 'Person' : 'People'}
+                </div>
+            </div>
+            
+            <div class="capacity-bar-container">
+                <div class="capacity-bar">
+                    <div class="capacity-fill ${status}" style="width: ${capacityPercent}%"></div>
+                </div>
+                <div class="capacity-label">
+                    <span>${capacityPercent}% Capacity</span>
+                    <span class="status-text ${status}">${formatStatus(status)}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="room-footer">
+            <div class="timestamp ${isStale ? 'stale' : ''}">
+                <span class="time-icon">${isStale ? '⚠️' : '🕐'}</span>
+                <span>${formattedTime}</span>
+                ${isStale ? '<span class="stale-badge">Stale</span>' : ''}
+            </div>
+        </div>
     `;
 
     return card;
 }
 
 /**
- * Determine occupancy status based on people count
+ * Determine occupancy status with 4-tier system and capacity calculation
+ * @param {number} count - Number of people in the room
+ * @param {number} maxCapacity - Optional custom max capacity (defaults to CONFIG value)
+ * @returns {Object} Status object with status, color, icon, and capacityPercent
  */
-function getOccupancyStatus(count) {
+function getOccupancyStatus(count, maxCapacity = CONFIG.MAX_CAPACITY_PER_ROOM) {
+    // Validate inputs
+    count = Math.max(0, parseInt(count, 10) || 0);
+    maxCapacity = Math.max(1, parseInt(maxCapacity, 10) || CONFIG.MAX_CAPACITY_PER_ROOM);
+    
+    const capacityPercent = Math.min(Math.round((count / maxCapacity) * 100), 100);
+    
     if (count === 0) {
-        return { status: 'empty', color: '#0369a1' };
-    } else if (count <= 5) {
-        return { status: 'moderate', color: '#92400e' };
+        return { 
+            status: 'empty', 
+            color: '#0ea5e9', 
+            icon: '🚪',
+            capacityPercent
+        };
+    } else if (count <= CONFIG.THRESHOLDS.LOW) {
+        return { 
+            status: 'low', 
+            color: '#10b981', 
+            icon: '✓',
+            capacityPercent
+        };
+    } else if (count <= CONFIG.THRESHOLDS.MODERATE) {
+        return { 
+            status: 'moderate', 
+            color: '#f59e0b', 
+            icon: '⚠️',
+            capacityPercent
+        };
     } else {
-        return { status: 'full', color: '#991b1b' };
+        return { 
+            status: 'high', 
+            color: '#ef4444', 
+            icon: '🔴',
+            capacityPercent
+        };
     }
+}
+
+/**
+ * Check if data is stale (older than configured threshold)
+ * @param {string} timestamp - ISO timestamp string
+ * @param {number} thresholdMinutes - Optional custom threshold (defaults to CONFIG value)
+ * @returns {boolean} True if data is stale
+ */
+function isDataStale(timestamp, thresholdMinutes = CONFIG.STALENESS_THRESHOLD_MINUTES) {
+    try {
+        const dataAge = Date.now() - new Date(timestamp).getTime();
+        return dataAge > thresholdMinutes * 60 * 1000;
+    } catch (error) {
+        console.error('Error checking data staleness:', error);
+        return true; // Treat invalid timestamps as stale
+    }
+}
+
+/**
+ * Format room name for display
+ */
+function formatRoomName(roomId) {
+    return roomId
+        .replace(/_/g, ' ')
+        .replace(/-/g, ' ')
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+}
+
+/**
+ * Format status for display
+ */
+function formatStatus(status) {
+    const statusMap = {
+        'empty': 'Available',
+        'low': 'Light',
+        'moderate': 'Moderate',
+        'high': 'Busy'
+    };
+    return statusMap[status] || status;
 }
 
 /**
@@ -281,25 +444,51 @@ function formatTimestamp(isoString) {
  */
 function updateLastUpdateTime() {
     const now = new Date();
-    lastUpdateText.textContent = `Last updated: ${now.toLocaleTimeString()}`;
+    lastUpdateText.textContent = now.toLocaleTimeString();
 }
 
 /**
- * Update status text
+ * Update building statistics
+ * @param {Array} rooms - Array of room objects
  */
-function updateStatus(message, type = 'info') {
-    statusText.textContent = message;
-    statusText.style.color = getStatusColor(type);
+function updateStatistics(rooms) {
+    if (!rooms || !Array.isArray(rooms)) {
+        console.error('Invalid rooms data provided to updateStatistics');
+        return;
+    }
+
+    const total = rooms.reduce((sum, room) => sum + (room.people_count || 0), 0);
+    const occupied = rooms.filter(room => room.people_count > 0).length;
+    const busy = rooms.filter(room => room.people_count > CONFIG.THRESHOLDS.MODERATE).length;
+    const empty = rooms.filter(room => room.people_count === 0).length;
+    
+    if (totalOccupancy) totalOccupancy.textContent = total;
+    if (activeRooms) activeRooms.textContent = occupied;
+    if (busyRooms) busyRooms.textContent = busy;
+    if (emptyRooms) emptyRooms.textContent = empty;
 }
 
-function getStatusColor(type) {
-    const colors = {
-        success: '#10b981',
-        error: '#ef4444',
-        warning: '#f59e0b',
-        info: '#6b7280',
+/**
+ * Update connection status indicator
+ */
+function updateConnectionStatus(status, message) {
+    connectionStatus.className = `connection-status ${status}`;
+    statusText.textContent = message;
+}
+
+/**
+ * Update status text (for backward compatibility)
+ */
+function updateStatus(message, type = 'info') {
+    const statusMap = {
+        success: { status: 'connected', msg: message },
+        error: { status: 'error', msg: message },
+        warning: { status: '', msg: message },
+        info: { status: '', msg: message }
     };
-    return colors[type] || colors.info;
+    
+    const { status, msg } = statusMap[type] || { status: '', msg: message };
+    updateConnectionStatus(status, msg);
 }
 
 // ============================================
@@ -315,11 +504,11 @@ function hideLoadingIndicator() {
 
 function showError(message) {
     errorMessage.textContent = message;
-    errorMessage.classList.remove('hidden');
+    errorAlert.classList.remove('hidden');
 }
 
 function hideErrorMessage() {
-    errorMessage.classList.add('hidden');
+    errorAlert.classList.add('hidden');
 }
 
 function showEmptyState() {
@@ -334,10 +523,53 @@ function hideEmptyState() {
 // ============================================
 // Event Listeners
 // ============================================
+// Store references to event handlers for cleanup
+const eventHandlers = {
+    refresh: null,
+    filters: []
+};
+
 function attachEventListeners() {
-    refreshBtn.addEventListener('click', () => {
+    // Refresh button with debounce
+    eventHandlers.refresh = debounce(() => {
         loadRoomData();
+    }, 500);
+    
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', eventHandlers.refresh);
+    }
+    
+    // Filter buttons
+    const filterButtons = document.querySelectorAll('.filter-btn');
+    filterButtons.forEach(btn => {
+        const handler = () => {
+            // Update active button
+            filterButtons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            // Apply filter
+            currentFilter = btn.dataset.filter;
+            if (allRooms.length > 0) {
+                renderRoomCards(allRooms);
+            }
+        };
+        eventHandlers.filters.push({ element: btn, handler });
+        btn.addEventListener('click', handler);
     });
+}
+
+/**
+ * Clean up event listeners to prevent memory leaks
+ */
+function removeEventListeners() {
+    if (refreshBtn && eventHandlers.refresh) {
+        refreshBtn.removeEventListener('click', eventHandlers.refresh);
+    }
+    
+    eventHandlers.filters.forEach(({ element, handler }) => {
+        element.removeEventListener('click', handler);
+    });
+    eventHandlers.filters = [];
 }
 
 function setupAutoRefresh() {
@@ -351,9 +583,30 @@ function setupAutoRefresh() {
 // Utilities
 // ============================================
 /**
- * Escape HTML special characters
+ * Debounce function to limit rapid calls
+ * @param {Function} func - Function to debounce
+ * @param {number} wait - Milliseconds to wait
+ * @returns {Function} Debounced function
+ */
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+/**
+ * Escape HTML special characters to prevent XSS
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped text
  */
 function escapeHtml(text) {
+    if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
@@ -370,5 +623,7 @@ document.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('beforeunload', () => {
     if (refreshInterval) {
         clearInterval(refreshInterval);
+        refreshInterval = null;
     }
+    removeEventListeners();
 });
