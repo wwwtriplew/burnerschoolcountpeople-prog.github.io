@@ -1,67 +1,246 @@
-# Room Occupancy Monitor - Frontend
+# Visitor Counting System - Frontend
 
-A lightweight, fast, and maintainable static website that displays live room occupancy using data from Supabase. Built with vanilla HTML/CSS/JavaScript + Supabase JS SDK.
+A production-ready static website displaying real-time visitor distribution across a 7-floor building. Built with vanilla JavaScript and the Supabase JS SDK for zero-dependency, high-performance monitoring.
 
-## 🎯 Overview
+**Backend Repository:** [wwwtriplew/Visitor-Counting-System-Backend](https://github.com/wwwtriplew/Visitor-Counting-System-Backend)
 
-This frontend displays real-time visitor distribution across rooms by fetching data from a Supabase PostgreSQL database. The backend (YOLO-based image processing system) continuously updates room occupancy counts, which are displayed here with a modern security monitoring dashboard and interactive floor plans.
 
-**Data Flow:**
+
+## 🎯 System Overview
+
+### Complete Architecture
+
 ```
-Backend (YOLO Processing) → Supabase Database → Frontend (This App) → Display
+┌─────────────┐         ┌──────────────────┐         ┌──────────────┐
+│  Cameras    │ ─POST─→ │  HTTP Ingestion  │ ─SDK─→  │   Backend    │
+│  (70 cams)  │         │     Server       │         │   Pipeline   │
+│  ESP32/Pi   │         │  (Flask/Python)  │         │ (YOLO v8)    │
+└─────────────┘         └──────────────────┘         └──────┬───────┘
+                                                              │
+    ┌─────────────────────────────────────────────────────────┘
+    │                         Processes images
+    │                         Counts people (AI)
+    │                         Stores results
+    ↓
+┌───────────────────────────────────────────────────────────────┐
+│                    Supabase PostgreSQL                        │
+│  Table: detections                                            │
+│  • id (UUID)           - Unique record ID                     │
+│  • room_id (TEXT)      - Camera/Room identifier (e.g., "401") │
+│  • person_count (INT)  - Number of people detected            │
+│  • timestamp (TIMESTAMPTZ) - Detection time                   │
+└───────────────────────┬───────────────────────────────────────┘
+                        │
+                        │ Read via anon key (RLS protected)
+                        ↓
+            ┌───────────────────────────┐
+            │   Frontend (This Repo)    │
+            │   • Dashboard View        │
+            │   • Floor Plan View       │
+            │   • GitHub Pages Deploy   │
+            └───────────────────────────┘
 ```
 
-**Two Display Modes:**
-1. **Dashboard View** (`index.html`) - Real-time room occupancy cards for monitoring
-2. **Floor Plan View** (`floorplan.html`) - Interactive building navigation for visitors
+### Data Flow
 
-## 🏢 Camera ID Convention
+1. **Cameras** capture images every 60 seconds
+2. **HTTP Server** receives Base64/JPEG images via REST API
+3. **Backend Pipeline** processes images using YOLO v8 AI model
+4. **Detection Results** stored in Supabase database (`detections` table)
+5. **Frontend** queries Supabase and displays real-time occupancy
 
-**Important:** This system uses a standardized camera numbering scheme across the 7-floor building.
+### Two Display Modes
 
-### Camera Numbering System
+#### 1. **Dashboard View** (`index.html`)
+**Purpose:** Real-time monitoring for security guards and staff
 
-- **Format**: `XYY` where:
-  - `X` = Floor number (1-7)
-  - `YY` = Camera number on that floor (01-10)
+- Live occupancy display with 4-tier status system
+- Building-wide statistics (total occupancy, busy rooms, etc.)
+- Filter controls (all/occupied/empty)
+- Responsive card grid layout
 
-- **Range**: Each floor has 10 cameras
-  - Floor 1: Cameras 101-110
-  - Floor 2: Cameras 201-210
-  - Floor 3: Cameras 301-310
-  - Floor 4: Cameras 401-410
-  - Floor 5: Cameras 501-510
-  - Floor 6: Cameras 601-610
-  - Floor 7: Cameras 701-710
+#### 2. **Floor Plan View** (`floorplan.html`)
+**Purpose:** Interactive navigation for visitors planning routes
 
-### Camera Positioning Rules
+- Building overview showing all 7 floors
+- Floor-specific maps with room overlays
+- Click-to-navigate between floors
+- Visual occupancy indicators on floor plans
 
-**Lower camera IDs = More left/down position on the floor**
 
-- Cameras are numbered from **left to right** and **bottom to top**
-- No cameras in lavatories (lat) or prep rooms
-- Only classrooms, labs, and public spaces have cameras
+## 🏢 Camera ID System Specification
 
-### Example: 4th Floor (Chemistry/Physics/Biology Labs)
+### Camera Numbering Convention
 
-| Room Name | Location | Camera ID |
-|-----------|----------|-----------|
-| Chemistry Lab | Far left | **401** |
-| Physics Lab | Center-left | **402** |
-| Biology Lab | Center-right | **403** |
-| Lab Prep Room | (No camera) | - |
-| Classroom 4A | Left side | **405** |
-| Classroom 4B | Center | **406** |
-| Classroom 4C | Center-right | **407** |
-| 6B Classroom (Room 413) | Far right | **410** |
+There are not 70 cameras, so placeholder is included.
 
-**Database Convention:** Room IDs in the database can be flexible formats like:
-- `"401"` (direct camera ID)
-- `"room-401"` 
-- `"camera_401"`
-- `"chemistry-lab-401"`
+Up to 70 cameras can be connected for now
 
-The system automatically extracts the 3-digit camera ID from any room_id format.
+The system uses a **standardized 3-digit camera ID format** across the entire building:
+
+**Format:** `XYY`
+- `X` = Floor number (1-7)
+- `YY` = Camera sequence number on that floor (01-10)
+
+**Examples:**
+- Camera 101 = Floor 1, Camera #1
+- Camera 205 = Floor 2, Camera #5
+- Camera 410 = Floor 4, Camera #10
+- Camera 707 = Floor 7, Camera #7
+
+### Building Configuration
+
+- **Total Cameras:** 70 cameras (7 floors × 10 cameras per floor)
+- **Camera ID Ranges:**
+  - Floor 1: **101 - 110**
+  - Floor 2: **201 - 210**
+  - Floor 3: **301 - 310**
+  - Floor 4: **401 - 410**
+  - Floor 5: **501 - 510**
+  - Floor 6: **601 - 610**
+  - Floor 7: **701 - 710**
+
+### Spatial Positioning Rules
+
+**Camera numbering reflects physical location on floor:**
+
+- **Lower camera numbers** → More **left/down** position
+- **Higher camera numbers** → More **right/up** position
+- No cameras in: Lavatories, prep rooms, storage closets
+- Cameras only in: Classrooms, labs, public spaces, hallways
+
+### Example: 4th Floor Layout
+
+| Camera ID | Room Name | Location |
+|-----------|-----------|----------|
+| **401** | Chemistry Lab | Far left |
+| **402** | Physics Lab | Center-left |
+| **403** | Biology Lab | Center |
+| **404** | Lab Prep Room | Center-right |
+| **405** | Classroom 4A | Left side |
+| **406** | Classroom 4B | Center |
+| **407** | Classroom 4C | Center-right |
+| **408** | Study Room | Right side |
+| **409** | Storage | Left back |
+| **410** | 6B Classroom (Room 413) | Far right |
+
+### Database Room ID Format
+
+**Backend writes flexible `room_id` formats to database:**
+
+The backend's `room_id` validation pattern: `^[A-Za-z0-9_-]{1,64}$`
+
+**Supported formats (all valid):**
+- `"401"` - Direct camera ID (recommended)
+- `"room-401"` - Descriptive format
+- `"camera_401"` - Underscore format
+- `"chemistry-lab-401"` - Named format
+- `"4F-chem-lab-401"` - Full descriptive format
+
+**Frontend automatically extracts camera ID:**
+
+```javascript
+// JavaScript extraction logic (from floorplan-script.js)
+function extractCameraId(room_id) {
+    const match = room_id.match(/(\d{3})/);  // Match 3-digit sequence
+    return match ? parseInt(match[1]) : null;
+}
+
+// Examples:
+extractCameraId("401")                  // → 401
+extractCameraId("room-401")             // → 401
+extractCameraId("chemistry-lab-401")    // → 401
+extractCameraId("4F-chem-401")          // → 401
+```
+
+**Why this flexibility matters:**
+
+1. **Human-readable names** in backend/database (easier debugging)
+2. **Consistent camera ID extraction** in frontend (reliable mapping)
+3. **Future-proof** for room name changes (camera IDs remain stable)
+4. **Backward compatible** with any existing naming conventions
+
+### Camera ID Usage in Code
+
+**Backend (Python) - Insertion:**
+```python
+# From wwwtriplew/Visitor-Counting-System-Backend
+from backend.process_images import ImageProcessingPipeline
+
+pipeline = ImageProcessingPipeline(
+    supabase_url=SUPABASE_URL,
+    supabase_service_key=SERVICE_KEY
+)
+
+# Backend can use any valid room_id format
+result = pipeline.process_image(
+    base64_image=image_data,
+    room_id="chemistry-lab-401"  # Flexible format
+)
+
+# Writes to Supabase: {"room_id": "chemistry-lab-401", "person_count": 12, ...}
+```
+
+**Frontend (JavaScript) - Extraction:**
+```javascript
+// From this repository
+async function fetchRoomData() {
+    const { data } = await supabaseClient
+        .from('detections')
+        .select('room_id, person_count, timestamp')
+        .order('timestamp', { ascending: false });
+    
+    // Group by camera ID (extracted from any room_id format)
+    const roomMap = {};
+    data.forEach(row => {
+        const cameraId = extractCameraId(row.room_id);  // Extract 3-digit ID
+        if (cameraId && cameraId >= 101 && cameraId <= 710) {
+            const floor = Math.floor(cameraId / 100);  // Get floor number
+            if (!roomMap[cameraId]) {
+                roomMap[cameraId] = {
+                    cameraId: cameraId,
+                    floor: floor,
+                    room_id: row.room_id,
+                    count: row.person_count,
+                    timestamp: row.timestamp
+                };
+            }
+        }
+    });
+    
+    return Object.values(roomMap);
+}
+```
+
+### Floor Plan Positioning System
+
+**Room overlays on floor maps use camera IDs:**
+
+```javascript
+// From floorplan-script.js - Room position configuration
+const FLOOR_ROOM_POSITIONS = {
+    4: {  // 4th Floor map
+        401: { x: 15, y: 20, name: 'Chemistry Lab' },      // 15% right, 20% down
+        402: { x: 35, y: 20, name: 'Physics Lab' },        // 35% right, 20% down
+        403: { x: 55, y: 20, name: 'Biology Lab' },        // 55% right, 20% down
+        // ... more rooms
+        410: { x: 85, y: 80, name: '6B Classroom (413)' }  // 85% right, 80% down
+    },
+    // Add other floors as maps are created
+};
+
+// Usage: Position overlay on floor map
+function positionRoomOverlay(cameraId, floorMapImage) {
+    const floor = Math.floor(cameraId / 100);
+    const position = FLOOR_ROOM_POSITIONS[floor]?.[cameraId];
+    
+    if (position) {
+        const left = (floorMapImage.width * position.x) / 100;
+        const top = (floorMapImage.height * position.y) / 100;
+        // Create overlay at (left, top) coordinates
+    }
+}
+```
 
 ## ✨ Features
 
@@ -104,43 +283,282 @@ The system automatically extracts the 3-digit camera ID from any room_id format.
 - **Null Safety**: Comprehensive null checks for DOM elements
 - **GitHub Pages Ready**: Deploy directly to GitHub Pages
 
+
+## 🔌 Backend Integration
+
+### Backend System Overview
+
+The backend repository ([wwwtriplew/Visitor-Counting-System-Backend](https://github.com/wwwtriplew/Visitor-Counting-System-Backend)) provides:
+
+1. **HTTP Ingestion Server** - Flask-based REST API for camera integration
+2. **YOLO v8 Processing Pipeline** - AI-powered person detection
+3. **Supabase Integration** - Automatic data storage with retry logic
+4. **Production-Ready Architecture** - Error handling, logging, validation
+
+### Backend Architecture
+
+```python
+# From backend repository - Main processing pipeline
+from backend.process_images import ImageProcessingPipeline
+
+# Initialize once (loads YOLO model, connects to Supabase)
+pipeline = ImageProcessingPipeline(
+    supabase_url="https://your-project.supabase.co",
+    supabase_service_key="your-service-role-key",  # SECRET - never expose
+    model_path="yolov8n.pt",                        # Nano model (~6MB)
+    table_name="detections"
+)
+
+# Process camera image
+result = pipeline.process_image(
+    base64_image=camera_image_b64,
+    room_id="chemistry-lab-401",
+    timestamp=datetime.now()
+)
+
+# Returns: {"success": True, "people_count": 12, "room_id": "chemistry-lab-401", ...}
+```
+
+### Camera Integration
+
+**Cameras POST images to HTTP server every 60 seconds:**
+
+```bash
+# Example: ESP32/Raspberry Pi camera script
+curl -X POST http://backend-server:8000/api/v1/process-image-bytes \
+    -H "X-API-KEY: your-api-key-here" \
+    -F "file=@snapshot.jpg" \
+    -F "room_id=401"
+```
+
+**Server processes and stores automatically:**
+1. Validates API key and room_id format
+2. Converts image to JPEG (if Base64)
+3. Runs YOLO inference (detects people with confidence > 0.5)
+4. Inserts `{room_id, person_count, timestamp}` to Supabase
+5. Returns processing result to camera
+
+### Backend Configuration
+
+**Environment variables (backend `.env` file):**
+```bash
+# Required
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-service-role-key-here
+
+# Optional with defaults
+TABLE_NAME=detections                    # Database table
+YOLO_MODEL_PATH=yolov8n.pt              # AI model file
+INGESTION_API_KEY=your-api-key          # Camera authentication
+SERVER_HOST=0.0.0.0                      # Server bind address
+SERVER_PORT=8000                         # HTTP port
+```
+
+**Backend validation rules:**
+- `room_id`: Must match pattern `^[A-Za-z0-9_-]{1,64}$`
+- `image`: Max 10MB (decoded size)
+- `person_count`: Must be 0-1000 (configurable in `backend/config.py`)
+- `timestamp`: ISO 8601 format with timezone
+
+### YOLO Detection Configuration
+
+**AI model settings (from `backend/config.py`):**
+```python
+# YOLO Configuration
+YOLO_CONFIDENCE_THRESHOLD = 0.5  # Only count people with >50% confidence
+PERSON_CLASS_ID = 0              # COCO dataset class ID for "person"
+DEFAULT_YOLO_MODEL_PATH = "yolov8n.pt"  # Lightweight nano model
+
+# Detection is NOT 100% accurate - factors affecting accuracy:
+# - Partial occlusions (people behind furniture/others)
+# - Distance from camera (small faces harder to detect)
+# - Image quality and lighting conditions
+# - People at extreme angles or edges
+# - Confidence threshold (lower = more detections but more false positives)
+```
+
+**To improve detection accuracy:**
+1. Lower confidence threshold to 0.3-0.4 (in `backend/config.py`)
+2. Use higher resolution camera images
+3. Ensure good lighting conditions
+4. Position cameras to minimize occlusions
+5. Use larger YOLO model (yolov8s.pt or yolov8m.pt) for better accuracy
+
+### Backend API Endpoints
+
+**1. Process Image - Multipart Upload (Recommended)**
+```http
+POST /api/v1/process-image-bytes
+Content-Type: multipart/form-data
+X-API-KEY: your-api-key-here
+
+Fields:
+  - file: (binary JPEG file)
+  - room_id: (string, e.g., "401" or "chemistry-lab-401")
+```
+
+**Response (Success - 200 OK):**
+```json
+{
+  "status": "ok",
+  "room_id": "chemistry-lab-401",
+  "people_count": 12,
+  "timestamp": "2025-12-01T14:23:45.678492",
+  "processing_ms": 641
+}
+```
+
+**Response (Error - 4xx/5xx):**
+```json
+{
+  "error": "Invalid room_id format",
+  "status_code": 400,
+  "details": "room_id must match pattern ^[A-Za-z0-9_-]{1,64}$"
+}
+```
+
+**2. Process Image - Base64 JSON**
+```http
+POST /api/v1/process-image
+Content-Type: application/json
+X-API-KEY: your-api-key-here
+
+{
+  "image": "/9j/4AAQSkZJRgABAQEAYABgAAD...",  // Base64-encoded JPEG
+  "room_id": "401"
+}
+```
+
+**Error Codes:**
+- `400 Bad Request` - Invalid room_id, image format, or missing fields
+- `401 Unauthorized` - Missing or invalid API key
+- `413 Payload Too Large` - Image exceeds 10MB
+- `500 Internal Server Error` - Processing failed (YOLO error, database error)
+
+### Testing Backend Integration
+
+**1. Test with sample image (Python):**
+```python
+import base64
+import requests
+
+# Read test image
+with open("test_image.jpg", "rb") as f:
+    image_b64 = base64.b64encode(f.read()).decode("utf-8")
+
+# Send to backend
+response = requests.post(
+    "http://backend-server:8000/api/v1/process-image",
+    headers={"X-API-KEY": "your-api-key"},
+    json={
+        "image": image_b64,
+        "room_id": "test-room-401"
+    }
+)
+
+print(response.json())
+# Expected: {"status": "ok", "people_count": X, ...}
+```
+
+**2. Verify in Supabase:**
+```sql
+-- Check latest detections
+SELECT * FROM detections
+ORDER BY timestamp DESC
+LIMIT 10;
+
+-- Check specific camera
+SELECT * FROM detections
+WHERE room_id LIKE '%401%'
+ORDER BY timestamp DESC
+LIMIT 5;
+```
+
+**3. Monitor backend logs:**
+```bash
+# Backend logs show processing details
+2025-12-01 14:23:45 - INFO - Processing image for room 'chemistry-lab-401'
+2025-12-01 14:23:46 - INFO - YOLO detected 12 people (confidence > 0.5)
+2025-12-01 14:23:46 - INFO - Successfully inserted into Supabase
+2025-12-01 14:23:46 - INFO - Processing completed in 641ms
+```
+
+### Data Synchronization
+
+**Backend → Frontend data flow:**
+
+1. **Camera captures image** (every 60 seconds)
+2. **Backend processes** (YOLO inference ~500-1000ms)
+3. **Database updated** (Supabase insert ~50-100ms)
+4. **Frontend queries** (every 30 seconds via auto-refresh or manual)
+5. **Display updates** (real-time occupancy shown)
+
+**Latency breakdown:**
+- Camera → Backend: Network latency (~10-50ms on LAN)
+- YOLO Processing: 500-1000ms (first run slower due to model loading)
+- Database Insert: 50-100ms (Supabase latency)
+- Frontend Query: 100-300ms (depends on network)
+- **Total end-to-end:** ~1-2 seconds from capture to display
+
+**Handling stale data:**
+- Frontend marks data as "stale" if older than 5 minutes
+- Visual indicator shows last update time
+- Manual refresh button forces immediate query
+- Auto-refresh can be enabled (default: every 30 seconds)
+
 ## 🔐 Security
 
-### Why Hardcoded Credentials are Safe
+### Frontend Security Model
 
-The Supabase **anon key** is safe to expose in frontend code because:
+**Why hardcoded Supabase anon key is safe:**
 
-1. **Row Level Security (RLS)**: Supabase RLS policies restrict database access
-   - Anon key can **only read** from the `detections` table
-   - Cannot write, update, or delete data
-   - Backend uses service role key (kept secret) for writes
+1. **Row Level Security (RLS)** - Database access controlled by policies, not key secrecy
+   - Anon key can **only SELECT** from `detections` table
+   - Cannot INSERT, UPDATE, or DELETE records
+   - Backend uses service_role key (kept secret) for writes
 
-2. **Public Information**: Both the project URL and anon key are intended to be public
-   - Similar to API keys in public SDKs (Google Maps, Firebase, etc.)
-   - Protected by RLS policies, not by secrecy
+2. **Public by Design** - Anon key is meant to be exposed in client-side code
+   - Similar to Google Maps API key, Firebase config, etc.
+   - Project URL is also public (required for API access)
+   - Security enforced by RLS policies, not credential hiding
 
-3. **No Sensitive Data**: The `detections` table contains only non-sensitive occupancy data
-   - Room IDs, people counts, timestamps
-   - No personal information or private details
+3. **Non-Sensitive Data** - No privacy concerns with occupancy data
+   - Room IDs (public building information)
+   - People counts (aggregate statistics only)
+   - Timestamps (when count was taken)
+   - No personal information, names, or identifiable data
 
-### RLS Configuration Example
+### Backend Security Model
+
+**Backend uses service_role key (MUST be kept secret):**
+
+```python
+# Backend .env file (NEVER commit to git, NEVER expose to frontend)
+SUPABASE_SERVICE_KEY=eyJhbGci...  # Has full database access, bypasses RLS
+INGESTION_API_KEY=your-secret-key  # Authenticates cameras
+```
+
+**Camera authentication:**
+- Each camera request includes `X-API-KEY` header
+- Server validates key before processing
+- Prevents unauthorized image uploads
+- Cameras configured with API key in firmware/script
+
+### RLS Configuration
 
 ```sql
--- Enable RLS on detections table
+-- Enable Row Level Security on detections table
 ALTER TABLE detections ENABLE ROW LEVEL SECURITY;
 
--- Allow anonymous users to read all data
-CREATE POLICY "Allow public read access"
+-- Allow public read access (for frontend with anon key)
+CREATE POLICY "Allow anonymous read access"
   ON detections
   FOR SELECT
   TO anon
   USING (true);
 
--- Only authenticated users (backend) can insert
-CREATE POLICY "Allow authenticated insert"
-  ON detections
-  FOR INSERT
-  WITH CHECK (true);
+-- Backend service_role key bypasses RLS automatically
+-- No INSERT policy needed for anon role = writes blocked
 ```
 
 ## 📋 Setup Instructions
@@ -207,39 +625,183 @@ git push origin main
 - **Memory Usage**: ~15-20MB (stable over time)
 - **Animation FPS**: 60 FPS on modern devices
 
-## 🔄 API Reference
 
-### Supabase Table Schema
+## 📊 Database Schema
 
-The app expects this table structure:
+### Supabase Table Structure
+
+The backend writes to a `detections` table with the following schema:
 
 ```sql
 CREATE TABLE detections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    room_id TEXT NOT NULL,
-    person_count INTEGER NOT NULL,  -- or people_count
-    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    room_id TEXT NOT NULL,                      -- Camera ID or descriptive name (e.g., "401" or "chemistry-lab-401")
+    person_count INTEGER NOT NULL,              -- Number of people detected by YOLO v8
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- Detection time (ISO 8601 with timezone)
+    created_at TIMESTAMPTZ DEFAULT NOW()         -- Record creation time
+);
+
+-- Performance indexes for fast queries
+CREATE INDEX idx_detections_room_id ON detections(room_id);
+CREATE INDEX idx_detections_timestamp ON detections(timestamp DESC);
+CREATE INDEX idx_detections_room_timestamp ON detections(room_id, timestamp DESC);
+```
+
+### Column Specifications
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PRIMARY KEY | Auto-generated unique identifier |
+| `room_id` | TEXT | NOT NULL, Pattern: `^[A-Za-z0-9_-]{1,64}$` | Camera/room identifier (flexible format) |
+| `person_count` | INTEGER | NOT NULL, >= 0, <= 1000 | Number of people detected (YOLO confidence > 0.5) |
+| `timestamp` | TIMESTAMPTZ | NOT NULL | Detection timestamp with timezone |
+| `created_at` | TIMESTAMPTZ | DEFAULT NOW() | Database insertion time |
+
+**Note:** Some backend configurations use `people_count` instead of `person_count`. The frontend supports both column names automatically.
+
+### Row Level Security (RLS)
+
+**Backend uses service role key** (full database access, bypasses RLS):
+```python
+# Backend writes with service_role key
+pipeline = ImageProcessingPipeline(
+    supabase_url=SUPABASE_URL,
+    supabase_service_key=SERVICE_ROLE_KEY  # Secret, never exposed
+)
+```
+
+**Frontend uses anon key** (read-only access via RLS policies):
+```javascript
+// Frontend reads with anon key (safe to expose)
+const supabase = window.supabase.createClient(
+    'https://your-project.supabase.co',
+    'your-anon-key-here'  // Public key, RLS protected
 );
 ```
 
-**Note**: The app supports both `person_count` and `people_count` column names.
+**RLS Policy Configuration:**
+```sql
+-- Enable Row Level Security
+ALTER TABLE detections ENABLE ROW LEVEL SECURITY;
 
-### Frontend Query
+-- Allow public read access (for frontend)
+CREATE POLICY "Allow anonymous read access"
+  ON detections
+  FOR SELECT
+  TO anon
+  USING (true);
 
-```javascript
-// Fetches latest 500 records, grouped by room_id
-SELECT room_id, timestamp, person_count
-FROM detections
-ORDER BY timestamp DESC
-LIMIT 500;
+-- Backend writes bypass RLS automatically with service_role key
+-- No INSERT policy needed for anon role
 ```
 
-The frontend automatically:
-1. Groups results by `room_id`
-2. Keeps only the most recent record per room
-3. Normalizes `person_count` ↔ `people_count`
-4. Validates and sanitizes counts (removes negatives)
+### Example Data
+
+**Sample records from backend:**
+```json
+[
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "room_id": "chemistry-lab-401",
+    "person_count": 12,
+    "timestamp": "2025-12-01T14:23:45.678Z",
+    "created_at": "2025-12-01T14:23:45.720Z"
+  },
+  {
+    "id": "f9e8d7c6-b5a4-3210-9876-543210fedcba",
+    "room_id": "410",
+    "person_count": 8,
+    "timestamp": "2025-12-01T14:23:48.123Z",
+    "created_at": "2025-12-01T14:23:48.200Z"
+  }
+]
+```
+
+### Frontend Query Logic
+
+**Fetching latest counts per room:**
+```javascript
+// Get last 500 records (covers all 70 cameras with history)
+const { data, error } = await supabaseClient
+    .from('detections')
+    .select('room_id, person_count, timestamp')
+    .order('timestamp', { ascending: false })
+    .limit(500);
+
+// Group by camera ID, keeping only most recent record
+const roomMap = {};
+data.forEach(row => {
+    const cameraId = extractCameraId(row.room_id);  // Extract 3-digit ID
+    if (cameraId && !roomMap[cameraId]) {
+        roomMap[cameraId] = {
+            cameraId: cameraId,
+            floor: Math.floor(cameraId / 100),
+            room_id: row.room_id,
+            count: row.person_count,
+            timestamp: new Date(row.timestamp)
+        };
+    }
+});
+```
+
+**Why 500 records?**
+- 70 cameras × ~7 records per camera = ~500 total
+- Ensures we capture latest data even with update delays
+- Grouped client-side to avoid complex SQL queries
+- Faster than multiple individual queries
+
+### SQL Query Examples
+
+**Get latest count for all rooms:**
+```sql
+SELECT DISTINCT ON (room_id)
+    room_id,
+    person_count,
+    timestamp
+FROM detections
+ORDER BY room_id, timestamp DESC;
+```
+
+**Get specific camera history (last 24 hours):**
+```sql
+SELECT room_id, person_count, timestamp
+FROM detections
+WHERE room_id LIKE '%401%'  -- Matches "401", "room-401", "chemistry-lab-401"
+  AND timestamp > NOW() - INTERVAL '24 hours'
+ORDER BY timestamp DESC;
+```
+
+**Get floor-wide occupancy:**
+```sql
+-- For 4th floor (camera IDs 401-410)
+SELECT 
+    room_id,
+    person_count,
+    timestamp
+FROM (
+    SELECT DISTINCT ON (room_id)
+        room_id,
+        person_count,
+        timestamp
+    FROM detections
+    WHERE room_id ~ '^[a-z-]*4[0-9]{2}'  -- Regex: matches IDs containing 4XX
+    ORDER BY room_id, timestamp DESC
+) latest
+ORDER BY room_id;
+```
+
+**Calculate average occupancy per hour:**
+```sql
+SELECT 
+    DATE_TRUNC('hour', timestamp) as hour,
+    AVG(person_count) as avg_occupancy,
+    MAX(person_count) as peak_occupancy,
+    COUNT(*) as sample_count
+FROM detections
+WHERE timestamp > NOW() - INTERVAL '7 days'
+GROUP BY hour
+ORDER BY hour DESC;
+```
 
 ## 🛠️ Customization
 
@@ -309,15 +871,318 @@ The app logs all errors to console. Open Developer Tools:
 | `Could not find the table` | Table name wrong | Update CONFIG.TABLE_NAME |
 | `Failed to fetch` | Network error | Check Supabase project status |
 
-### Using Debug Tool
+## 🐛 Troubleshooting
 
-1. Open `debug.html` in browser
-2. It will automatically:
-   - Test Supabase connection
-   - Try to access your table
-   - List available tables
-   - Show sample data structure
-3. Share the output if requesting help
+### Frontend Issues
+
+#### No Data Displayed ("No rooms to display")
+
+**Possible causes:**
+1. Backend not running or not processing images
+2. Wrong table name in CONFIG
+3. Supabase connection failed
+4. RLS policies blocking read access
+
+**Debug steps:**
+```javascript
+// 1. Check browser console (F12) for errors
+// 2. Manually test Supabase connection
+const { data, error } = await supabaseClient
+    .from('detections')
+    .select('*')
+    .limit(5);
+
+console.log('Data:', data);
+console.log('Error:', error);
+
+// 3. Check table name matches backend
+// Backend default: "detections"
+// Old configurations may use: "room_stats"
+
+// 4. Verify RLS policies in Supabase dashboard:
+// Settings → Database → Row Level Security
+```
+
+**Solutions:**
+- Verify backend is running: `curl http://backend-server:8000/health`
+- Check Supabase table name: `CONFIG.TABLE_NAME` in `script.js`
+- Test RLS policies: Use Supabase SQL Editor to query as anon role
+- Check backend logs for processing errors
+
+#### Data Shows as "Stale" (Old Timestamps)
+
+**Causes:**
+- Backend stopped processing images
+- Cameras not sending images
+- Network issues between cameras and backend
+
+**Check backend status:**
+```bash
+# SSH to backend server
+tail -f /var/log/backend.log
+
+# Should see lines like:
+# 2025-12-01 14:23:45 - INFO - Processing image for room 'chemistry-lab-401'
+# 2025-12-01 14:23:46 - INFO - Successfully inserted into Supabase
+```
+
+**Check camera connectivity:**
+```bash
+# From backend server, test camera endpoint
+curl http://camera-ip/snapshot -o test.jpg
+
+# If successful, manually send to backend
+curl -X POST http://localhost:8000/api/v1/process-image-bytes \
+    -H "X-API-KEY: your-api-key" \
+    -F "file=@test.jpg" \
+    -F "room_id=test-401"
+```
+
+**Solutions:**
+- Restart backend server
+- Check camera power and network connections
+- Verify camera scripts are running
+- Check API key validity
+
+#### Camera IDs Not Extracted (Shows as "Unknown")
+
+**Cause:** Room ID format doesn't contain 3-digit camera ID
+
+**Debug:**
+```javascript
+// Check actual room_id values in database
+const { data } = await supabaseClient
+    .from('detections')
+    .select('room_id')
+    .limit(10);
+
+console.log(data.map(r => r.room_id));
+
+// Expected formats: "401", "room-401", "chemistry-lab-401"
+// Invalid formats: "chemistry", "4F", "lab" (no 3-digit ID)
+```
+
+**Solution:** Update backend camera configuration to include camera ID in room_id:
+```python
+# Backend camera configuration
+# Before (invalid):
+room_id = "chemistry-lab"
+
+# After (valid):
+room_id = "chemistry-lab-401"  # Or "401", "room-401", etc.
+```
+
+### Backend Issues
+
+#### Backend Not Receiving Images
+
+**Check camera script:**
+```bash
+# Test camera POST request
+curl -X POST http://backend-server:8000/api/v1/process-image-bytes \
+    -H "X-API-KEY: your-api-key-here" \
+    -F "file=@test_image.jpg" \
+    -F "room_id=test-401" \
+    -v  # Verbose output shows full request/response
+
+# Expected: HTTP/1.1 200 OK
+# Error: 401 = wrong API key
+# Error: 400 = invalid room_id or image
+# Error: 500 = backend processing error
+```
+
+**Check backend server logs:**
+```bash
+# Python backend logs
+python -m backend.process_images --help
+
+# Or if running as HTTP server:
+tail -f backend_server.log
+```
+
+#### YOLO Detection Inaccurate
+
+**Symptoms:** Person count consistently too low or too high
+
+**Causes:**
+- Confidence threshold too high (misses people)
+- Poor lighting or image quality
+- Occlusions (people behind furniture)
+- Camera angle suboptimal
+
+**Solutions:**
+
+1. **Lower confidence threshold** (backend `config.py`):
+```python
+# Default: 0.5 (50% confidence)
+YOLO_CONFIDENCE_THRESHOLD = 0.3  # Try 0.3 or 0.4 for more detections
+```
+
+2. **Improve image quality:**
+- Increase camera resolution (1080p or higher)
+- Adjust camera positioning (overhead view works best)
+- Improve lighting in room
+
+3. **Test with sample image:**
+```python
+# Backend testing script
+from backend.process_images import ImageProcessingPipeline
+import base64
+
+with open('test_image.jpg', 'rb') as f:
+    image_b64 = base64.b64encode(f.read()).decode('utf-8')
+
+pipeline = ImageProcessingPipeline(...)
+result = pipeline.process_image(image_b64, 'test-room')
+
+print(f"Detected: {result['people_count']} people")
+# Compare with actual count in image
+```
+
+#### Database Inserts Failing
+
+**Symptoms:** Backend logs show "Supabase insertion failed"
+
+**Check Supabase status:**
+1. Go to Supabase dashboard
+2. Check project status (top right)
+3. Check database connections (Settings → Database)
+
+**Check table schema:**
+```sql
+-- Verify table exists and has correct columns
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_name = 'detections';
+
+-- Expected columns:
+-- room_id (text)
+-- person_count (integer) or people_count (integer)
+-- timestamp (timestamp with time zone)
+```
+
+**Check backend credentials:**
+```bash
+# Verify .env file (backend server)
+cat .env | grep SUPABASE
+
+# Should show:
+# SUPABASE_URL=https://...
+# SUPABASE_SERVICE_KEY=eyJ...  (long key)
+
+# Test connection
+python -c "
+from backend.utils.supabase_utils import create_supabase_client
+client = create_supabase_client('$SUPABASE_URL', '$SUPABASE_SERVICE_KEY')
+print('Connection successful!')
+"
+```
+
+### Network Issues
+
+#### High Latency / Slow Updates
+
+**Causes:**
+- Supabase project location far from users
+- Network congestion
+- Too many concurrent requests
+
+**Monitor performance:**
+```javascript
+// Add to script.js for debugging
+async function fetchRoomsWithTiming() {
+    const start = Date.now();
+    const { data, error } = await supabaseClient
+        .from('detections')
+        .select('*')
+        .limit(500);
+    const elapsed = Date.now() - start;
+    
+    console.log(`Query took ${elapsed}ms`);
+    // Typical: 100-300ms
+    // Slow: >1000ms = investigate network/Supabase
+}
+```
+
+**Solutions:**
+- Enable Supabase connection pooling
+- Use Supabase Edge Functions for better latency
+- Consider caching layer (Redis)
+- Optimize query (reduce limit if not needed)
+
+### Common Error Messages
+
+| Error | Location | Cause | Solution |
+|-------|----------|-------|----------|
+| `Required DOM element not found: roomGrid` | Frontend (script.js) | HTML file modified incorrectly | Verify element IDs match `initializeDOMElements()` |
+| `Could not find the table 'detections'` | Frontend | Table name mismatch | Check `CONFIG.TABLE_NAME` matches database |
+| `Missing API key` | Backend | Camera not sending X-API-KEY header | Add header to camera script |
+| `Invalid room_id format` | Backend | room_id contains invalid characters | Use only `[A-Za-z0-9_-]` characters |
+| `YOLO inference failed` | Backend | Model file missing or corrupted | Re-download `yolov8n.pt` model |
+| `Supabase connection timeout` | Backend | Network/firewall blocking | Check firewall rules, Supabase IP whitelist |
+| `Row Level Security policy violation` | Frontend | Trying to INSERT with anon key | Only SELECT allowed for anon role |
+
+### Debug Mode
+
+**Enable verbose logging:**
+
+```javascript
+// Frontend - Add to script.js
+const DEBUG = true;
+
+async function fetchRoomsData() {
+    if (DEBUG) console.log('[DEBUG] Fetching data from Supabase...');
+    
+    const { data, error } = await supabaseClient
+        .from(CONFIG.TABLE_NAME)
+        .select('*')
+        .order('timestamp', { ascending: false })
+        .limit(500);
+    
+    if (DEBUG) {
+        console.log('[DEBUG] Query result:', {
+            recordCount: data?.length,
+            error: error,
+            sampleData: data?.slice(0, 3)
+        });
+    }
+    
+    return { data, error };
+}
+```
+
+```python
+# Backend - Set in environment
+DEBUG=True python -m backend.process_images --help
+
+# Or in code:
+import logging
+logging.basicConfig(level=logging.DEBUG)
+```
+
+### Getting Help
+
+**When reporting issues, include:**
+
+1. **Frontend info:**
+   - Browser and version (from `navigator.userAgent`)
+   - Console errors (F12 → Console tab → screenshot)
+   - Network tab showing Supabase request/response
+
+2. **Backend info:**
+   - Backend logs (last 50 lines)
+   - Python version (`python --version`)
+   - Backend configuration (CONFIG values, not secrets)
+
+3. **Database info:**
+   - Table schema (`\d detections` in psql)
+   - Sample records (without sensitive data)
+   - RLS policies (from Supabase dashboard)
+
+4. **Network info:**
+   - Can backend reach Supabase? (`curl https://supabase-project-url`)
+   - Can frontend reach Supabase? (check Network tab)
+   - Firewall rules affecting connections?
 
 ## 📊 Browser Compatibility
 
@@ -390,34 +1255,56 @@ Include:
 
 ## 📝 Changelog
 
+### Version 2.1 (December 2025) - Documentation & Backend Integration
+
+**Documentation Updates:**
+- Comprehensive README covering full system architecture
+- Detailed camera ID convention with examples
+- Complete backend integration guide
+- Database schema with SQL queries
+- Security model explanation (RLS, anon vs service_role keys)
+- Extensive troubleshooting section
+- Backend API reference
+
+**Added:**
+- Camera ID extraction system for flexible room_id formats
+- Floor plan positioning system documentation
+- Backend data flow diagrams
+- Example code for Python and JavaScript integration
+- Network latency monitoring guidance
+
 ### Version 2.0 (November 2025) - Major Redesign
 
-**Added**:
+**Added:**
 - Modern dark theme security dashboard
 - Building-wide statistics panel
 - 4-tier status system (empty/light/moderate/busy)
 - Animated capacity bars
 - Data staleness detection
 - Filter controls (all/occupied/empty)
+- Floor plan view with interactive building overview
+- Dual-mode system (Dashboard + Floor Plan)
 - Configurable thresholds in CONFIG
 - Comprehensive null safety checks
 - Debounced refresh button
 - Memory leak prevention
 - JSDoc documentation
 
-**Fixed**:
+**Fixed:**
 - Hardcoded capacity thresholds → Now configurable
 - Missing DOM element error handling
 - Memory leaks from event listeners
 - No validation on negative counts
 - Inconsistent threshold usage across functions
 - XSS vulnerability in room names
+- eval() scope bug in DOM initialization
 
-**Changed**:
+**Changed:**
 - Table name: `room_stats` → `detections`
 - Column name: Auto-detects `person_count` or `people_count`
 - Status icons: Updated emoji set
 - Statistics: Added busy rooms count
+- Color scheme: 60-30-10 rule with brand colors (#102c52, #d3efef, #d91821)
 
 ### Version 1.0 (Initial Release)
 
@@ -426,21 +1313,106 @@ Include:
 - Manual refresh
 - Simple card layout
 
+## 🔗 Related Repositories
+
+### Backend System
+- **Repository:** [wwwtriplew/Visitor-Counting-System-Backend](https://github.com/wwwtriplew/Visitor-Counting-System-Backend)
+- **Purpose:** YOLO v8 image processing pipeline, HTTP ingestion server, Supabase integration
+- **Technology:** Python 3.8+, Flask, Ultralytics YOLO, OpenCV, Supabase SDK
+- **Features:**
+  - REST API for camera integration
+  - Real-time person detection with AI
+  - Automatic retry logic and error handling
+  - Production-ready logging and monitoring
+  - Configurable confidence thresholds
+
+### Deployment
+- **Frontend Hosting:** GitHub Pages (this repository)
+- **Backend Hosting:** Ubuntu Server 24.04 LTS (recommended) or Docker
+- **Database:** Supabase PostgreSQL (managed)
+- **Camera Network:** Local LAN (ESP32, Raspberry Pi, or IP cameras)
+
+## 📚 Additional Documentation
+
+### Frontend Documentation
+- **README.md** (this file) - Complete system documentation
+- **TROUBLESHOOTING.md** - Step-by-step problem solving
+- **NEW_UI_GUIDE.md** - User guide for guards and operators
+- **UI_REDESIGN.md** - Design system specifications
+- **future_plan.md** - Roadmap and planned features
+
+### Backend Documentation
+See [Backend Repository](https://github.com/wwwtriplew/Visitor-Counting-System-Backend) for:
+- **README.md** - Backend system documentation
+- **QUICKSTART.md** - 5-minute setup guide
+- **IMPROVEMENTS.md** - Technical architecture details
+- **SERVER_IMPLEMENTATION.md** - HTTP server design
+- **SERVER_DEPLOYMENT.md** - Production deployment guide
+- **POSTMAN_TESTS.md** - API testing guide
+
 ## 📄 License
 
-This project is part of an internal security monitoring system. All rights reserved.
+This project is part of an internal building security and visitor monitoring system. All rights reserved.
 
-## 🙏 Credits
+**Usage restrictions:**
+- Internal use only within authorized facilities
+- No redistribution without permission
+- Camera footage and occupancy data must comply with privacy regulations
+- YOLO model usage subject to Ultralytics license terms
 
-- **YOLO v8**: Object detection model by Ultralytics
-- **Supabase**: Backend-as-a-Service platform
-- **Modern UI Design**: Inspired by security monitoring systems
+## 🙏 Acknowledgments
+
+**Technologies:**
+- **YOLO v8** by [Ultralytics](https://github.com/ultralytics/ultralytics) - State-of-the-art object detection
+- **Supabase** - Open source Firebase alternative with PostgreSQL
+- **GitHub Pages** - Free static site hosting with HTTPS
+- **Supabase JS SDK** - JavaScript client library for database access
+
+**Inspiration:**
+- Modern security monitoring dashboards
+- Building management systems
+- Real-time occupancy tracking solutions
+
+**Contributors:**
+- Security Systems Team
+- Backend Development Team
+- Frontend Development Team
+
+## 📞 Support
+
+### Getting Help
+
+**For frontend issues:**
+1. Check browser console for errors (F12)
+2. Review this README's troubleshooting section
+3. Verify Supabase connection and RLS policies
+4. Test with `debug.html` (if available)
+
+**For backend issues:**
+1. Check backend server logs
+2. Review [Backend Documentation](https://github.com/wwwtriplew/Visitor-Counting-System-Backend)
+3. Test camera connectivity and API endpoints
+4. Verify YOLO model and Supabase credentials
+
+**For database issues:**
+1. Check Supabase dashboard for project status
+2. Verify table schema matches documentation
+3. Test RLS policies in SQL editor
+4. Check database connection limits
+
+### Contact
+
+- **System Administrator:** Contact your building IT department
+- **Backend Repository:** [GitHub Issues](https://github.com/wwwtriplew/Visitor-Counting-System-Backend/issues)
+- **Frontend Repository:** [GitHub Issues](https://github.com/wwwtriplew/burnerschoolcountpeople-prog.github.io/issues)
 
 ---
 
-**Last Updated**: November 26, 2025
-**Version**: 2.0
-**Maintainer**: Security Systems Team
+**Last Updated:** December 1, 2025  
+**Version:** 2.1  
+**Frontend Repository:** wwwtriplew/burnerschoolcountpeople-prog.github.io  
+**Backend Repository:** wwwtriplew/Visitor-Counting-System-Backend  
+**System Status:** Production Ready ✅
 ```bash
 # Serve with any static server
 python -m http.server 8000
