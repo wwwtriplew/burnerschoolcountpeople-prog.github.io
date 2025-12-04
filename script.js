@@ -13,8 +13,8 @@
 // 3. The project URL is publicly visible anyway
 // To configure: Replace these values with your Supabase project credentials
 const CONFIG = {
-    SUPABASE_URL: 'https://qkipwdjrzwzdvlxeoylx.supabase.co', // Replace with your Supabase URL
-    SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFraXB3ZGpyend6ZHZseGVveWx4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1NjQwMTUsImV4cCI6MjA4MDE0MDAxNX0.ANR9yhMx1dHEa4FeCJ2MMkUHl7raDJud3X22pHTwa68',
+    SUPABASE_URL: 'https://rgkkadtaiivcuuvekwdo.supabase.co', // Replace with your Supabase URL
+    SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJna2thZHRhaWl2Y3V1dmVrd2RvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5NzYyOTUsImV4cCI6MjA3OTU1MjI5NX0.cTAGAOIT_rpnQGNMO9v-o1PIHwyoB3r8xSPaqVccFrI',
     // Replace with your Supabase anon key ^^^^^^^^^^^^^^^^^^^^^^
     TABLE_NAME: 'detections', // Replace with your table name if different
     REFRESH_INTERVAL: 30000, // 30 seconds (auto-refresh interval)
