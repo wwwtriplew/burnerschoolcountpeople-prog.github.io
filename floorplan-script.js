@@ -26,13 +26,13 @@ const CONFIG = {
         MODERATE: 20
     },
     FLOORS: [
-        { number: 1, name: '1st Floor', hasMap: false },
-        { number: 2, name: '2nd Floor', hasMap: false },
-        { number: 3, name: '3rd Floor', hasMap: false },
-        { number: 4, name: '4th Floor', hasMap: true, mapFile: '4F.jpg' },
-        { number: 5, name: '5th Floor', hasMap: false },
-        { number: 6, name: '6th Floor', hasMap: false },
-        { number: 7, name: '7th Floor', hasMap: false }
+        { number: -1, name: 'Playground Floor', hasMap: true, mapFile: 'playground.jpg' },
+        { number: 0, name: 'Ground Floor', hasMap: true, mapFile: 'ground_floor.jpg' },
+        { number: 1, name: '1st Floor', hasMap: true, mapFile: 'first_floor.jpg' },
+        { number: 2, name: '2nd Floor', hasMap: true, mapFile: 'second floor.jpg' },
+        { number: 3, name: '3rd Floor', hasMap: true, mapFile: 'third_floor.jpg' },
+        { number: 4, name: '4th Floor', hasMap: true, mapFile: 'fourth_floor.jpg' },
+        { number: 6, name: '6th Floor', hasMap: false }
     ]
 };
 
@@ -40,20 +40,40 @@ const CONFIG = {
 // Floor Map Room Positions (for overlay)
 // ============================================
 // Coordinates are percentages of image dimensions (0-100)
+// Note: Positions will need to be adjusted based on actual floor map layouts
 const FLOOR_ROOM_POSITIONS = {
+    '-1': { // Playground Floor
+        'Fitness Centre': { x: 25, y: 50, name: 'Fitness Centre' },
+        'Canteen': { x: 75, y: 50, name: 'Canteen' }
+    },
+    0: { // Ground Floor
+        'G7': { x: 30, y: 50, name: 'G7' },
+        'VA': { x: 70, y: 50, name: 'VA' }
+    },
+    1: { // 1st Floor
+        '105': { x: 15, y: 30, name: '105' },
+        '106': { x: 35, y: 30, name: '106' },
+        '107': { x: 55, y: 30, name: '107' },
+        'STEM Maker Lab': { x: 75, y: 30, name: 'STEM Maker Lab' },
+        'Chinese Academy': { x: 50, y: 70, name: 'Chinese Academy' }
+    },
+    2: { // 2nd Floor
+        '201': { x: 10, y: 25, name: '201' },
+        '202': { x: 25, y: 25, name: '202' },
+        '203': { x: 40, y: 25, name: '203' },
+        '204': { x: 55, y: 25, name: '204' },
+        '205': { x: 70, y: 25, name: '205' },
+        '209': { x: 85, y: 25, name: '209' },
+        'Home Economics Room': { x: 50, y: 70, name: 'Home Economics Room' }
+    },
+    3: { // 3rd Floor
+        'Phy Lab': { x: 30, y: 50, name: 'Physics Lab' },
+        'Bio Lab': { x: 70, y: 50, name: 'Biology Lab' }
+    },
     4: { // 4th Floor
-        401: { x: 15, y: 20, name: 'Chemistry Lab' },
-        402: { x: 35, y: 20, name: 'Physics Lab' },
-        403: { x: 55, y: 20, name: 'Biology Lab' },
-        404: { x: 75, y: 20, name: 'Lab Prep Room' },
-        405: { x: 15, y: 50, name: 'Classroom 4A' },
-        406: { x: 35, y: 50, name: 'Classroom 4B' },
-        407: { x: 55, y: 50, name: 'Classroom 4C' },
-        408: { x: 75, y: 50, name: 'Study Room' },
-        409: { x: 15, y: 80, name: 'Storage' },
-        410: { x: 85, y: 80, name: '6B Classroom (413)' }
+        'Chem Lab': { x: 50, y: 50, name: 'Chemistry Lab' }
     }
-    // Add positions for other floors as maps become available
+    // 6th Floor (Library) has no map available
 };
 
 // ============================================

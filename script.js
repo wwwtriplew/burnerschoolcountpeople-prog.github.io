@@ -59,7 +59,9 @@ const FIXED_ROOMS = [
     // 3rd Floor
     { room_id: 'Phy Lab', display_name: 'Physics Lab', floor: '3rd', floor_order: 3 },
     { room_id: 'Bio Lab', display_name: 'Biology Lab', floor: '3rd', floor_order: 3 },
-    { room_id: 'Chem Lab', display_name: 'Chemistry Lab', floor: '3rd', floor_order: 3 },
+    
+    // 4th Floor
+    { room_id: 'Chem Lab', display_name: 'Chemistry Lab', floor: '4th', floor_order: 4 },
     
     // 6th Floor
     { room_id: 'Library', display_name: 'Library', floor: '6th', floor_order: 6 }
@@ -145,7 +147,7 @@ async function initializeApp() {
         await loadRoomData();
 
         // Set up auto-refresh (optional)
-        // setupAutoRefresh();
+        setupAutoRefresh();
 
         updateStatus('Connected', 'success');
     } catch (error) {

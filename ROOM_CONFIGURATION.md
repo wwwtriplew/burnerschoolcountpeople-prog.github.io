@@ -48,6 +48,8 @@ The Visitor Counting System has been updated to display a **fixed set of 20 pred
 ### 3rd Floor
 17. **Physics Lab** (room_id: "Phy Lab")
 18. **Biology Lab** (room_id: "Bio Lab")
+
+### 4th Floor
 19. **Chemistry Lab** (room_id: "Chem Lab")
 
 ### 6th Floor
@@ -88,6 +90,8 @@ room_ids = [
     # 3rd Floor
     "Phy Lab",
     "Bio Lab",
+    
+    # 4th Floor
     "Chem Lab",
     
     # 6th Floor
@@ -202,29 +206,34 @@ The following floor plan images are available in `assets/floormaps/`:
 - `first_floor.jpg` - 1st floor
 - `second floor.jpg` - 2nd floor
 - `third_floor.jpg` - 3rd floor
-- `fourth_floor.jpg` - 4th floor (original example, not in current room list)
+- `fourth_floor.jpg` - 4th floor (Chemistry Lab)
 
 ### Map Integration
 To integrate floor plans with the floor plan view (`floorplan.html`):
 
 1. Update `floorplan-script.js` CONFIG.FLOORS:
 ```javascript
-{ number: -1, name: 'Playground', hasMap: true, mapFile: 'playground.jpg' },
+{ number: -1, name: 'Playground Floor', hasMap: true, mapFile: 'playground.jpg' },
 { number: 0, name: 'Ground Floor', hasMap: true, mapFile: 'ground_floor.jpg' },
 { number: 1, name: '1st Floor', hasMap: true, mapFile: 'first_floor.jpg' },
 { number: 2, name: '2nd Floor', hasMap: true, mapFile: 'second floor.jpg' },
 { number: 3, name: '3rd Floor', hasMap: true, mapFile: 'third_floor.jpg' },
+{ number: 4, name: '4th Floor', hasMap: true, mapFile: 'fourth_floor.jpg' },
 { number: 6, name: '6th Floor', hasMap: false }
 ```
 
 2. Define room positions in FLOOR_ROOM_POSITIONS:
 ```javascript
 const FLOOR_ROOM_POSITIONS = {
-    -1: { // Playground
-        'Fitness Centre': { x: 20, y: 30, name: 'Fitness Centre' },
-        'Canteen': { x: 70, y: 30, name: 'Canteen' }
+    '-1': { // Playground
+        'Fitness Centre': { x: 25, y: 50, name: 'Fitness Centre' },
+        'Canteen': { x: 75, y: 50, name: 'Canteen' }
     },
-    // ... positions for other floors
+    0: { // Ground Floor
+        'G7': { x: 30, y: 50, name: 'G7' },
+        'VA': { x: 70, y: 50, name: 'VA' }
+    },
+    // ... positions for other floors (1st, 2nd, 3rd, 4th)
 };
 ```
 
@@ -277,6 +286,7 @@ Update floor_order in script.js:
 - 1st: 1
 - 2nd: 2
 - 3rd: 3
+- 4th: 4
 - 6th: 6
 
 ### Issue: Statistics Showing Wrong Count
