@@ -85,6 +85,7 @@ let supabaseClient = null;
 let currentFloor = null;
 let allRoomData = {};
 let isLoading = false;
+let refreshInterval = null;
 
 // DOM Elements
 let buildingOverview, floorDetailView, floorGrid;
@@ -150,6 +151,9 @@ async function initializeApp() {
         
         await loadAllRoomData();
         renderBuildingOverview();
+        
+        // Set up auto-refresh
+        setupAutoRefresh();
         
         updateStatus('Connected', 'success');
     } catch (error) {
@@ -234,13 +238,16 @@ async function loadAllRoomData() {
         ];
         
         // Create map of fetched data with case-insensitive matching
+        // Keep only the LATEST record per room (first in DESC order)
         const fetchedDataMap = {};
         for (const record of data) {
             const normalizedId = record.room_id.toLowerCase().trim();
+            // Only store if this is the first time we see this room (latest due to ORDER BY DESC)
             if (!fetchedDataMap[normalizedId]) {
                 fetchedDataMap[normalizedId] = {
                     count: Math.max(0, parseInt(record.person_count) || 0),
-                    timestamp: record.timestamp
+                    timestamp: record.timestamp,
+                    original_room_id: record.room_id
                 };
             }
         }
@@ -262,7 +269,8 @@ async function loadAllRoomData() {
         });
         
         updateLastUpdateTime();
-        updateStatus(`Connected • ${Object.keys(allRoomData).length} cameras`, 'success');
+        const roomsWithData = Object.values(allRoomData).filter(r => r.hasData).length;
+        updateStatus(`Connected • ${roomsWithData}/${Object.keys(allRoomData).length} rooms reporting`, 'success');
         
     } catch (error) {
         console.error('Error loading data:', error);
@@ -566,6 +574,23 @@ function debounce(func, wait) {
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
     };
+}
+
+function setupAutoRefresh() {
+    // Clear any existing interval
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+    }
+    
+    // Auto-refresh every 30 seconds
+    refreshInterval = setInterval(async () => {
+        await loadAllRoomData();
+        if (currentFloor !== null) {
+            renderFloorDetail(currentFloor);
+        } else {
+            renderBuildingOverview();
+        }
+    }, CONFIG.REFRESH_INTERVAL);
 }
 
 // ============================================
